@@ -1,0 +1,420 @@
+---
+title: "STA302 Final Project - Fall 2022"
+author: "Sung-chi (William) Wu - 1006990446"
+subtitle: 'Word count: 1558'
+date: "2022/12/20"
+output:
+  pdf_document: default
+  html_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#install.packages("car")
+library(tidyverse)
+library(ggplot2)
+library(car)
+library(gridExtra)
+set.seed(1)
+```
+## Introduction
+This research is motivated by the increase in attention toward sports betting in recent years. The popularity of sports betting is evident in the recent 2022 FIFA World Cup, where the world beats a record of spending 136 billion Euros on sports betting this year [2]. As a participant in this trending global entertainment, predicting the best performing NBA player each season allows me accumulate wealth to pay for my basic monthly expenses. Hence the research question: Predicting the number of points an NBA player scores in the 2017 NBA regular season using their number of assists, steals, blocks, rebounds, and turnovers. 
+Previous researches have built predictive models on point scoring based on player physical characteristics that do not vary by season. For example, [3] produced a predictive model for point scoring based on player's Body Mass Index and number of assists and steals. [4] produced one model based on university, birth place and date. However, none of the researches produced a linear regression model of point scoring on all major game play statistics, which vary greatly season-by-season. In addition to the common variables that were considered in the previous studies such as the number of assists and steals, in this research I will also consider other game play statistics including number of blocks, rebounds and turnovers to get a better picture of how these statistics can used to predict point scoring. 
+
+
+## Methodology
+### The Dataset 
+Our research aims to find the 'best' model to predict an NBA player's points scored by their number of assists, steals, blocks, rebounds, and turnovers during the 2017 NBA regular season. Appendix 1 includes a description of all selected variables. 
+
+### Model Violations and Diagnostics
+The data originates from Kaggle [1]. We begin our investigation by randomly splitting the data into training and testing data, by a ratio of 50/50. We first build a full model by regressing PTS on the five predictors using training data. Then, we plot the response PTS against the fitted values to check condition 1. If the points are randomly scattered around the identity function, condition 1 is satisfied. We then use a scatterplot of all the pairs of predictors to identify any relationship between predictors. An absence of non-linear relationships will indicate condition 2 is satisfied. Given no severe violations of the two conditions, we will proceed to checking assumptions by using residual versus fitted plots, residual versus predictor plots, and normal Quantile-Quantile plots. 
+
+An absence of systematic patterns and large cluster of residuals in the residual plots will indicate the linearity assumption and independence assumption are satisfied. An absence of discernible patterns, especially a fanning pattern, in the residuals plots will indicate homoscedasticity assumption is satisfied. Finally, if the points form a straight diagonal line in the QQ-plot with minimal deviations at the ends, the normality assumption is satisfied. If any of the assumptions are violated, we will implement Box-Cox power transformation to identify which variable(s) to be transformed and the most appropriate form of transformation to mitigate violations. After we select our preferred model, I will identify outliers, leverage points, and influential points, using Cook's Distance and DFFITS and remove them if given sufficient rationale to do so.
+
+### Variable and Model Selection
+First, we will use two-way stepwise selection method based on AIC/BIC to choose a subset of predictors. By removing different variables, we will try to find balance between complexity and predictive power between different models by assessing their adjusted $R^2$ and AIC/BIC. Second, for each new model built, we will also conduct Partial-F tests to ensure that none of the predictors removed are significant. If p-value of F-test > 0.05, we proceed with the reduced model, otherwise we stick with the original model. Third, we will also check multicollinearity for reduced model by assessing their VIFs and remove any predictor(s) with VIF>5 and that are insignificant to the model by checking with partial-F test. We will also very the conditions and assumptions and proceed to model validation only with the models that do not have severe assumption violations. If multiple models have violated assumptions, I will pick the one that has the minimal violation.
+
+### Model Validation
+After checking for problematic points, we will proceed to use cross validation on testing data. We will build the same models and perform necessary transformations on the test data as we did with train data. We will then assess the predictor VIFs, number of influential points by Cooks and DFFITS, assumption violations, and summaries of the coefficients. If none of the assumptions are violated and the same predictors remain significant, then our model may be validated. 
+\newpage
+
+## Results
+```{r, echo=FALSE, include=FALSE}
+#Loading in data, cleaning data, splitting data
+library(tidyverse)
+nba <- read.csv(file="players_stats.csv", header=T)
+nba <- select(nba, PTS, AST, STL, BLK, REB, TOV)
+#Cleaning the dataset, removing NAs
+nba <- drop_na(nba)
+
+#Split the dataset into training and testing sets by 50/50
+dt = sort(sample(nrow(nba), nrow(nba)*.5))
+train<-nba[dt,]
+test<-nba[-dt,]
+
+write.csv(train, file="nba_train.csv")
+write.csv(test, file="nba_test.csv")
+
+train <- read.csv(file="nba_train.csv", header=T)
+test <- read.csv(file="nba_test.csv", header=T)
+
+train <- train[,-1]
+test <- test[,-1]
+```
+### Exploratory Data Analysis
+
+Our train and test data each contains 245 observations and display. From Figure 1, we observe two similarities between training and testing data. First, the response and predictors between the two datasets share similar distribution that is right-skewed, indicating potential violations in Normality, Linearity and a poorly fitted model. Second, multiple outliers exist in all variables in both datasets, which might impact our ability to accurately measure means and spread.
+
+```{r fig.height=3, echo=FALSE, message=FALSE, warning=FALSE}
+#Boxplot for identifying outliers and influential points
+box_PTS <- train %>%
+ggplot(aes(y=PTS)) +
+geom_boxplot(color='black', fill='blue') +
+labs(title="PTS")
+
+box_AST <- train %>%
+ggplot(aes(y=AST)) +
+geom_boxplot(color='black', fill='blue') +
+labs(title="AST")
+
+box_STL <- train %>%
+ggplot(aes(y=STL)) +
+geom_boxplot(color='black', fill='blue') +
+labs(title="STL")
+
+box_BLK <- train %>%
+ggplot(aes(y=BLK)) +
+geom_boxplot(color='black', fill='blue') +
+labs(title="BLK")
+
+box_REB <- train %>%
+ggplot(aes(y=REB)) +
+geom_boxplot(color='black', fill='blue') +
+labs(title="REB")
+
+box_TOV <- train %>%
+ggplot(aes(y=TOV)) +
+geom_boxplot(color='black', fill='blue') +
+labs(title="TOV")
+
+box_PTStest <- test %>%
+ggplot(aes(y=PTS)) +
+geom_boxplot(color='black', fill='orange') +
+labs(title="PTS")
+
+box_ASTtest <- test %>%
+ggplot(aes(y=AST)) +
+geom_boxplot(color='black', fill='orange') +
+labs(title="AST")
+
+box_STLtest <- test %>%
+ggplot(aes(y=STL)) +
+geom_boxplot(color='black', fill='orange') +
+labs(title="STL")
+
+box_BLKtest <- test %>%
+ggplot(aes(y=BLK)) +
+geom_boxplot(color='black', fill='orange') +
+labs(title="BLK")
+
+box_REBtest <- test %>%
+ggplot(aes(y=REB)) +
+geom_boxplot(color='black', fill='orange') +
+labs(title="REB")
+
+box_TOVtest <- test %>%
+ggplot(aes(y=TOV)) +
+geom_boxplot(color='black', fill='orange') +
+labs(title="TOV")
+
+grid.arrange(box_PTS, box_AST, box_STL, box_BLK, box_REB, box_TOV, nrow=2, top="Figure 2: Boxplots of Response and Predictors in Train Data and Testing Data")
+grid.arrange(box_PTStest, box_ASTtest, box_STLtest, box_BLKtest, box_REBtest, box_TOVtest, nrow=2, top="")
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+# Fitting the Model
+model_full <- lm(PTS ~ . , data = train)
+summary(model_full)
+```
+```{r, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+#Applying Boxcox transformation and refitting the model
+#Replacing 0s with the mean of the column to perform boxcox method
+train <-  train %>% mutate(across(.cols = 1:6, .fns = ~ifelse(.x == 0, mean(.x), .x)))
+
+# this transforms all X and Y simultaneously
+transform <- powerTransform(cbind(train[,1:6]))
+summary(transform)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+#Square root transformation
+train$sqrt_PTS <- sqrt(train$PTS)
+train$sqrt_AST <- sqrt(train$AST)
+train$sqrt_STL <- sqrt(train$STL)
+train$sqrt_BLK <- sqrt(train$BLK)
+train$sqrt_REB <- sqrt(train$REB)
+train$sqrt_TOV <- sqrt(train$TOV)
+
+trans_model_full <- lm(sqrt_PTS ~ sqrt_AST + sqrt_STL + sqrt_BLK + sqrt_REB + sqrt_TOV, data = train)
+summary(trans_model_full)
+```
+### Model Violations and Diagnostics
+The original full model shows violations in condition 1 and 2 (Appendix 2). In the response versus fitted values plot, a fanning pattern exists around the identity function, which implies a potential non-linear population relationship of the model, hence a violation in condition 1. We also observe that fanning patterns exist between every pairs of predictors, hence a violation in condition 2. \
+
+The original model shows violations in constant variance and normality (Appendix 3). The residual plots show fanning patterns in the residuals of each predictor. From the Q-Q plot, we observe there are severe deviations from Normality at the two ends of the quantiles in all predictors, which may cause inaccurate p-values, confidence intervals and judgement on estimates. We use Box-Cox transformation by taking the square root of the response and all predictors in the transformed model, which shows significant improvement in the conditions and assumptions in all variables. We proceed to variable and model selection with the transformed full model, containing the response sqrt_PTS and predictors sqrt_AST, sqrt_STL, sqrt_BLK, sqrt_REB, and sqrt_TOV. 
+
+
+### Variable Selection, Model Selection, and Checking for Multicollinearity
+```{r, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+#Check multicollinearity
+vif(trans_model_full)
+
+#Stepwise model selection
+#AIC
+model_select_aic <- step(trans_model_full, trace=0, k=2, direction='both')
+selected_var_aic <- attr(terms(model_select_aic), 'term.labels')
+selected_var_aic
+
+#BIC
+n <- nrow(train)
+model_select_bic <- step(trans_model_full, trace=0, k=log(n), direction='both')
+selected_var_bic <- attr(terms(model_select_bic), 'term.labels')
+selected_var_bic
+
+#Using the partial-F test to test if we should remove sqrt_BLK
+model_sqrt_BLK_reduced <- lm(sqrt_PTS ~ sqrt_AST + sqrt_STL + sqrt_REB + sqrt_TOV, data=train)
+anova(model_sqrt_BLK_reduced, trans_model_full) #We can remove sqrt_BLK
+
+#Using the partial-F test to test if we should remove sqrt_AST
+model_sqrt_BLKAST_reduced <- lm(sqrt_PTS ~ sqrt_STL + sqrt_REB + sqrt_TOV, data=train)
+anova(model_sqrt_BLKAST_reduced, trans_model_full) #We shouldn't remove sqrt_TOV
+
+model_reduced <- model_sqrt_BLK_reduced
+```
+
+A test of multicollinearity on the transformed model shows that sqrt_TOV has a VIF > 5, implying multicollinearity. We try to mitigate this by building a reduced model without sqrt_TOV and use partial-F to see if this is valid. An F-value of 257.4 suggests sqrt_TOV is significant and should not be removed. Therefore, we will proceed to model selection with the full model. 
+
+The stepwise selection by AIC generates a reduced model without sqrt_BLK, whereas both sqrt_AST and sqrt_BLK are removed when stepwise selection by BIC is performed. As shown in Table 1, full model and the reduced models have similar adjusted $R^2$, AIC and BIC. Reduced Model 1 with sqrt_BLK removed has the lowest AIC, whereas Reduced Model 2 with two predictors removed have lowest BIC. To determine whether one or both predictors should be removed, I used partial F-test to compare the reduced models with the full model. When only sqrt_BLK is removed, the partial-F test generates an F-value of 1.53, suggesting sqrt_BLK can be removed. When both predictors are removed, F = 3.17, indicating we cannot remove both predictors.
+
+The residual plots of Reduced Model 1 (Appendix 5) shows no severe deterioration in the conditions and assumptions. Therefore, we will proceed to model validation with Reduced Model 1, which contains four predictors that are all significant, as shown in Table 2. 
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+select = function(model, n)
+{
+  SSres <- sum(model$residuals^2)
+  Rsq <- summary(model)$r.squared
+  Rsq_adj <- summary(model)$adj.r.squared
+  p <- length(model$coefficients) - 1
+  AIC <- n*log(SSres/n) + 2*p     # you could also use AIC()
+  AICc <- AIC + (2*(p+2)*(p+3)/(n-p-1))
+  BIC <- n*log(SSres/n) + (p+2)*log(n)    # could also use BIC()
+  res <- c(SSres, Rsq, Rsq_adj, AIC, AICc, BIC)
+  names(res) <- c("SSres", "Rsq", "Rsq_adj", "AIC", "AIC_c", "BIC")
+  return(res)
+}
+
+# apply to the models
+s1 <- select(trans_model_full, nrow(train))
+s2 <- select(model_reduced, nrow(train))
+s3 <- select(model_sqrt_BLKAST_reduced, nrow(train))
+```
+
+Model | Adjusted $R^2$ | AIC | BIC 
+------|----------------|-----|-----
+Full model | `r round(s1[3], 2)` | `r round(s1[4], 2)` | `r round(s1[6], 2)`
+Reduced Model 1(-sqrt_BLK) | `r round(s2[3], 2)` | `r round(s2[4], 2)` | `r round(s2[6], 2)`
+Reduced Model 2(-sqrt_BLK, -sqrt_AST) | `r round(s3[3], 2)` | `r round(s3[4], 2)` | `r round(s3[6], 2)`
+
+Table: Summary of goodness measures for models fit to sqrt_PTS. The variables that were included in the full model were sqrt_AST, sqrt_STL, sqrt_BLK, sqrt_REB, sqrt_TOV. With a slight approximately equal adjusted-R^2, reduced model 1 has a slightly lower AIC value and the reduced model 2 has a slighly lower BIC value, indicating the model with sqrt_BLK removed is a better fitting model than the full model. 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+coef_table <- round(summary(model_reduced)$coef, 4)
+rownames(coef_table) <- c("Intercept", "sqrt_AST", "sqrt_STL", "sqrt_REB", "sqrt_TOV")
+knitr::kable(coef_table, caption="Parameter Estimates for the Transformed Full Model using Training Data")
+step_for <- formula(model_reduced)
+step_mod_test <- lm(step_for, data=train)
+```
+
+### Identifying Problematic Observations
+As shown in Table 3, Cook's Distance identified 0 and DFFITS identified 18 influential points in both models, representing 7% of the training data. We do not have contextual reasons to remove them. 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+# values to use in cutoffs
+n <- nrow(train)
+p <- length(coef(model_reduced))-1
+
+# define the cutoffs we will use
+Hcut <- 2*((p+1)/n)
+DFFITScut <- 2*sqrt((p+1)/n)
+DFBETAcut <- 2/sqrt(n)
+Dcut <- qf(0.5, p+1, n-p-1)
+
+# identify the leverage points
+h <- hatvalues(model_reduced)
+which(h>Hcut)
+
+# identify the outliers
+r <- rstandard(model_reduced)
+which(r < -2 | r > 2)
+which(r < -4 | r > 4)
+
+# identify influential points by Cook's distance
+D <- cooks.distance(model_reduced)
+which(D > Dcut)
+
+# identify influential points by DFFITS
+fits <- dffits(model_reduced)
+which(abs(fits) > DFFITScut)
+
+# identify influential points by DFBETAS
+betas <- dfbetas(model_reduced)
+dim(betas)
+
+for(i in 1:5){
+  print(paste0("Beta ", i-1))
+  print(which(abs(betas[,i]) > DFBETAcut))
+}
+```
+
+### Model Validation
+
+Adjusted $R^2$ is similar in both training and testing models with the testing model being slightly higher (0.8424 vs 0.9031). By comparing Table 2 and 4, we observe that there are minimal differences in the regression coefficients estimates and their standard errors. The predictors that are significant in the training model also significant in the testing model. Residual plots and QQ-plot in Appendix 5 also show that the assumptions are fulfilled in the testing data. With these criteria met, the final model is successfully validated. 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+#Making the same transformations in the test dataset
+test$sqrt_PTS <- sqrt(test$PTS)
+test$sqrt_AST <- sqrt(test$AST)
+test$sqrt_STL <- sqrt(test$STL)
+test$sqrt_BLK <- sqrt(test$BLK)
+test$sqrt_REB <- sqrt(test$REB)
+test$sqrt_TOV <- sqrt(test$TOV)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+#for temp1, code everything but don't display
+#first with training then with test set
+temp1 <- trans_model_full
+temp2 <- model_reduced
+
+p1 <- length(coef(temp1))-1
+n1 <- nrow(train)
+vif1 <- max(vif(temp1))
+D1 <- length(which(cooks.distance(temp1) > qf(0.5, p1+1, n1-p1-1)))
+fits1 <- length(which(abs(dffits(temp1)) > 2*sqrt((p1+1)/n1)))
+
+# fit in test dataset
+temp1test <- lm(sqrt_PTS ~ sqrt_AST + sqrt_STL + sqrt_BLK + sqrt_REB + sqrt_TOV, data = test)
+
+tp1 <- length(coef(temp1test))-1
+tn1 <- nrow(test)
+tvif1 <- max(vif(temp1test))
+tD1 <- length(which(cooks.distance(temp1test) > qf(0.5, tp1+1, tn1-tp1-1)))
+tfits1 <- length(which(abs(dffits(temp1test)) > 2*sqrt((tp1+1)/tn1)))
+
+# for temp2, code everything but don't display
+p2 <- length(coef(temp2))-1
+n2 <- nrow(train)
+vif2 <- max(vif(temp2))
+D2 <- length(which(cooks.distance(temp2) > qf(0.5, p2+1, n2-p2-1)))
+fits2 <- length(which(abs(dffits(temp2)) > 2*sqrt((p2+1)/n2)))
+
+
+temp2test <- lm(sqrt_PTS ~ sqrt_AST + sqrt_STL + sqrt_REB + sqrt_TOV, data=test)
+
+tp2 <- length(coef(temp2test))-1
+tn2 <- nrow(test)
+tvif2 <- max(vif(temp2test))
+tD2 <- length(which(cooks.distance(temp2test) > qf(0.5, tp2+1, tn2-tp2-1)))
+tfits2 <- length(which(abs(dffits(temp2test)) > 2*sqrt((tp2+1)/tn2)))
+
+summary(temp1test)
+summary(temp2test)
+```
+
+Characteristic | Full (Train) | Full (Test) | Reduced (Train) | Reduced (Test)
+---------------|----------------|---------------|-----------------|---------------
+Largest VIF value | `r vif1` | `r tvif1` | `r vif2` | `r tvif2`
+\# Cook's D | `r D1` | `r D1` | `r D1` | `r D1`
+\# DFFITS | `r fits1` | `r fits1` | `r tfits2` | `r tfits2`
+Violations | none | none | none | none
+
+Table: Summary of characteristics of two candidate models in the training and test datasets. Full Model uses sqrt_AST, sqrt_STL, sqrt_BLK, sqrt_REB, sqrt_TOV as predictors, while Reduced Model uses sqrt_ASL, sqrt_STL, sqrt_REB, sqrt_TOV as predictors. Response is sqrt_PTS (Points scored) in both models. Coefficients are presented as estimate $\pm$ SE (\* = significant t-test at $\alpha = 0.05$)
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+model_reduced_test <- lm(sqrt_PTS ~ sqrt_AST + sqrt_STL + sqrt_REB + sqrt_TOV, data=test)
+test_coef_table <- round(summary(model_reduced_test)$coef, 4)
+rownames(test_coef_table) <- c("Intercept", "sqrt_AST", "sqrt_STL", "sqrt_REB", "sqrt_TOV")
+knitr::kable(test_coef_table, caption="Table 3: Parameter Estimates for the Transformed Full Model Using Testing Data")
+```
+
+\newpage
+
+## Discussion
+Our final model explains 84.24% of the total variation in the response square root PTS. The model suggests that there is are positive relationship between the square root of the response and all the predictors. Specifically, one unit of increase in the square root of AST, STL, REB, TOV will lead to an expected increase in the square root of PTS by 0.2062, 0.6575, 0.4315, and 1.2070, respectively, keeping other predictors fixed. Therefore, to predict the top-scoring candidate in the 2017 NBA season, we will want to look for players that achieve high performance in these four key metrics.
+
+There are two limitations to our study. First, due to our decision to keep sqrt_TOV in our model, multicollinearity remains a problem in the final model as shown in Table 3, where the training model and testing model both contain predictors with VIF > 5. This may potentially reduce the precision of our coefficient estimates and weakens the statistical power of our model. Second, we identify a slight violation in constant variance among the predictors even after Box-cox transformation, which may deteriorate the accuracy of our p-value in t-tests and misinterpret the significance of some predictors. For instance, with a p-value close to 0.05, AST may potentially be insignificant and hence be removed from the model during stepwise selection. 
+
+\newpage
+
+## Reference
+[1] Goldstein, O. (2017, May 3). NBA players stats - 2014-2015. Kaggle. Retrieved December 20, 2022, from https://www.kaggle.com/datasets/drgilermo/nba-players-stats-20142015 
+
+[2]Li, X. (2021, December 1). National Basketball Association Most Valuable player prediction based on machine learning methods. SPIE Digital Library. Retrieved October 17, 2022, from https://www.spiedigitallibrary.org/conference-proceedings-of-spie/12079/120791Q/National-Basketball-Association-Most-Valuable-Player-prediction-based-on-machine/10.1117/12.2623094.full?SSO=1 
+
+[3] Yakowicz, W. (2022, November 18). Gamblers expected to wager more than $160 billion on the World Cup-here's where the smart money is going. Forbes. Retrieved December 20, 2022, from https://www.forbes.com/sites/willyakowicz/2022/11/17/gamblers-expected-to-wager-more-than-160-billion-on-the-world-cup-heres-where-the-smart-money-is-going/?sh=728e2f3e7e17 
+
+[4] Zhao, C. (2017). Predictive model for NBA teams, player metrics, and optimal strategies for team lineups (Order No. 10681438). Available from ProQuest Dissertations & Theses Global. (2023809112). Retrieved from http://myaccess.library.utoronto.ca/login?qurl=https%3A%2F%2Fwww.proquest.com%2Fdissertations-theses%2Fpredictive-model-nba-teams-player-metrics-optimal%2Fdocview%2F2023809112%2Fse-2%3Faccountid%3D14771
+
+\newpage
+
+## Appendices
+### Appendix 1: Description of Selected Variables
+Variable | Description 
+---------------|----------------
+PTS | Total Number of points the player scored in the 2017 NBA regular season
+AST | Total Number of assists the player achieved in the 2017 NBA regular season
+STL | Total Number of steals the player achieved in the 2017 NBA regular season 
+BLK | Total Number of blocks the player achieved in the 2017 NBA regular season 
+REB | Total Number of rebounds the player achieved in the 2017 NBA regular season
+TOV | Total Number of turovers the player achieved in the 2017 NBA regular season
+
+### Appendix 2: Checking Conditions of the Original Full Model (Training)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Checking condition 1
+fit <- model_full$fitted.values
+plot(train$PTS ~ fit)
+abline(a = 0, b = 1)
+lines(lowess(train$PTS ~ fit), lty=2)
+
+#Checking condition 2
+pairs(train[,c(2:6)])
+```
+
+### Appendix 3: Checking Assumptions of the Original Full Model (Training)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Checking assumptions
+par(mfrow=c(3,3))
+r <- model_full$residuals
+plot(r ~ fit, xlab="Fitted", ylab="Residuals")
+plot(r ~ train[,2], xlab="AST", ylab="Residuals")
+plot(r ~ train[,3], xlab="STL", ylab="Residuals")
+plot(r ~ train[,4], xlab="BLK", ylab="Residuals")
+plot(r ~ train[,5], xlab="REB", ylab="Residuals")
+plot(r ~ train[,6], xlab="TOV", ylab="Residuals")
+
+qqnorm(r)
+qqline(r)
+```
+
+### Appendix 4: Checking Conditions and Assumptions of the Reduced Model (Training)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+par(mfrow=c(2, 2))
+plot(model_reduced)
+```
+
+### Appendix 5: Checking Checking Conditions and Assumptions of the Final Model (Testing)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# Rechecking the 4 assumptions with testing data 
+par(mfrow=c(2, 2))
+plot(model_reduced_test)
+```
